@@ -1,0 +1,11 @@
+{
+  "Author": "yagi2",
+  "Name": "GilDelta",
+  "Punchline": "Track gil flow across self, retainers, and FC chest.",
+  "Description": "An always-on gil tracker for FFXIV. Watches your own gil, every retainer, and the FC chest, classifies each change (submarine return, retainer sale, NPC purchase, marketboard buy, repair, teleport, etc.), and surfaces the flow through a configurable widget (4 density modes) and a dashboard (timeline / chart / breakdown / heatmap). Read-only — never writes back to game state. Six-language UI (EN/JA/DE/FR/ZH/KO).",
+  "ApplicableVersion": "any",
+  "Tags": ["gil", "tracker", "wealth", "retainer", "fc", "submarine"],
+  "RepoUrl": "https://github.com/yagi2/GilDelta",
+  "IconUrl": "https://raw.githubusercontent.com/yagi2/GilDelta/main/images/icon.png",
+  "Changelog": "0.1.0.0 — Initial release."
+}
