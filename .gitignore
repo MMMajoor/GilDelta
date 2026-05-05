@@ -1,0 +1,15 @@
+# Dalamud / .NET build artifacts (added once code lands)
+bin/
+obj/
+*.user
+*.pdb
+.vs/
+.idea/
+.env
+.env.*
+.DS_Store
+Thumbs.db
+
+# Brainstorming + planning artifacts (kept local, never committed)
+.superpowers/
+docs/superpowers/
