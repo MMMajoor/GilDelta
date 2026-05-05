@@ -16,4 +16,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\GilDelta.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="System" />
+    <Using Include="Xunit" />
+  </ItemGroup>
 </Project>
