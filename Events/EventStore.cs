@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using GilDelta.Wallet;
@@ -63,6 +64,47 @@ public sealed class EventStore
 
             yield return record.ToDomain();
         }
+    }
+
+    /// <summary>
+    /// Re-runs <paramref name="inferrer"/> over events in [<paramref name="from"/>, <paramref name="to"/>],
+    /// replacing their category and note. Out-of-range events are preserved verbatim.
+    /// The previous file is preserved as <c>&lt;path&gt;.bak</c>.
+    /// </summary>
+    public void Reclassify(DateTimeOffset from, DateTimeOffset to, Inferrer inferrer)
+    {
+        if (!File.Exists(_path)) return;
+
+        var current = LoadAll().ToList();
+        var rewritten = new List<GilEvent>(current.Count);
+
+        foreach (var ev in current)
+        {
+            if (ev.Timestamp < from || ev.Timestamp > to)
+            {
+                rewritten.Add(ev);
+                continue;
+            }
+
+            var diff = new WalletDiff(ev.Wallet, 0, ev.Amount, ev.Timestamp);
+            var ctx = GameContext.Empty(ev.Timestamp);
+            var reclassified = inferrer.Classify(diff, ctx);
+            rewritten.Add(reclassified);
+        }
+
+        var bakPath = _path + ".bak";
+        File.Copy(_path, bakPath, overwrite: true);
+
+        var temp = _path + ".tmp";
+        using (var writer = new StreamWriter(temp, append: false))
+        {
+            foreach (var ev in rewritten)
+            {
+                var record = StoredEvent.From(ev, CurrentSchemaVersion);
+                writer.WriteLine(JsonSerializer.Serialize(record, JsonOpts));
+            }
+        }
+        File.Replace(temp, _path, destinationBackupFileName: null);
     }
 
     /// <summary>Internal DTO for JSON (de)serialization.</summary>
