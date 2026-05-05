@@ -10,6 +10,7 @@ public sealed class Inferrer
 
     public Inferrer(IReadOnlyList<IInferenceRule> rules)
     {
+        ArgumentNullException.ThrowIfNull(rules);
         if (rules.Count == 0)
             throw new ArgumentException("Inferrer must have at least one rule.", nameof(rules));
         _rules = rules;
@@ -27,11 +28,14 @@ public sealed class Inferrer
             catch
             {
                 // Rule blew up; fall through to next rule.
-                // Production code logs Warning here; tests don't care.
+                // TODO(plan-2): inject IPluginLog and emit Warning here so a
+                // throwing rule doesn't silently degrade to Misc with no signal.
             }
         }
 
-        // Should be unreachable when MiscRule is the last rule.
+        // Reachable only when no rule matched (the chain forgot a fallback).
+        // MiscRule as the last rule guarantees this branch is dead in practice;
+        // we still produce a well-formed GilEvent so callers never see null.
         return new GilEvent(diff.At, diff.Id, diff.Delta,
             GilEventCategory.Misc, "rule=<unmatched>; no rule matched");
     }
