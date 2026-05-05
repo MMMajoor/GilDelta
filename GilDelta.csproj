@@ -7,6 +7,11 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="tests\**\*.cs" />
+    <None Remove="tests\**\*" />
+    <EmbeddedResource Remove="tests\**\*" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="images\icon.png" Pack="true" Condition="Exists('images\icon.png')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>images\icon.png</Link>
