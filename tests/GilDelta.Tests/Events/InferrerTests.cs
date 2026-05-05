@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using GilDelta.Events;
 using GilDelta.Events.Rules;
 using GilDelta.Wallet;
@@ -40,7 +41,7 @@ public class InferrerTests
 
     private sealed class FakeRule(GilEventCategory category) : IInferenceRule
     {
-        public bool TryClassify(WalletDiff diff, GameContext ctx, out GilEvent? ev)
+        public bool TryClassify(WalletDiff diff, GameContext ctx, [NotNullWhen(true)] out GilEvent? ev)
         {
             ev = new GilEvent(diff.At, diff.Id, diff.Delta, category, "fake");
             return true;
