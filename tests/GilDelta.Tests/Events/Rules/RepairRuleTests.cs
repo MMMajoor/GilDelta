@@ -33,4 +33,22 @@ public class RepairRuleTests
             new WalletDiff(new WalletId(WalletKind.Self, ""), 100, 50, T0),
             Ctx(), out _));
     }
+
+    [Fact]
+    public void Self_increase_with_Repair_open_does_not_match()
+    {
+        var rule = new RepairRule();
+        Assert.False(rule.TryClassify(
+            new WalletDiff(new WalletId(WalletKind.Self, ""), 100, 1_000, T0),
+            Ctx("Repair"), out _));
+    }
+
+    [Fact]
+    public void Retainer_decrease_with_Repair_open_does_not_match()
+    {
+        var rule = new RepairRule();
+        Assert.False(rule.TryClassify(
+            new WalletDiff(new WalletId(WalletKind.Retainer, "Yui"), 100_000, 95_000, T0),
+            Ctx("Repair"), out _));
+    }
 }

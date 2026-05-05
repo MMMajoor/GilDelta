@@ -13,7 +13,7 @@ public sealed class RepairRule : IInferenceRule
         if (!ctx.OpenAddons.Contains("Repair")) return false;
 
         ev = new GilEvent(diff.At, diff.Id, diff.Delta, GilEventCategory.Repair,
-            "rule=RepairRule; addons=[Repair]");
+            $"rule=RepairRule; addons=[{string.Join(",", ctx.OpenAddons)}]");
         return true;
     }
 }

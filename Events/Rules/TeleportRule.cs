@@ -13,7 +13,7 @@ public sealed class TeleportRule : IInferenceRule
         if (!ctx.OpenAddons.Contains("Teleport")) return false;
 
         ev = new GilEvent(diff.At, diff.Id, diff.Delta, GilEventCategory.Teleport,
-            "rule=TeleportRule; addons=[Teleport]");
+            $"rule=TeleportRule; addons=[{string.Join(",", ctx.OpenAddons)}]");
         return true;
     }
 }

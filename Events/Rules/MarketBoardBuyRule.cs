@@ -13,7 +13,7 @@ public sealed class MarketBoardBuyRule : IInferenceRule
         if (!ctx.OpenAddons.Contains("ItemSearch")) return false;
 
         ev = new GilEvent(diff.At, diff.Id, diff.Delta, GilEventCategory.MarketBoardBuy,
-            "rule=MarketBoardBuyRule; addons=[ItemSearch]");
+            $"rule=MarketBoardBuyRule; addons=[{string.Join(",", ctx.OpenAddons)}]");
         return true;
     }
 }

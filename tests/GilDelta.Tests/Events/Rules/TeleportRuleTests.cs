@@ -33,4 +33,22 @@ public class TeleportRuleTests
             new WalletDiff(new WalletId(WalletKind.Self, ""), 100, 50, T0),
             Ctx(), out _));
     }
+
+    [Fact]
+    public void Self_increase_with_Teleport_open_does_not_match()
+    {
+        var rule = new TeleportRule();
+        Assert.False(rule.TryClassify(
+            new WalletDiff(new WalletId(WalletKind.Self, ""), 100, 1_000, T0),
+            Ctx("Teleport"), out _));
+    }
+
+    [Fact]
+    public void Retainer_decrease_with_Teleport_open_does_not_match()
+    {
+        var rule = new TeleportRule();
+        Assert.False(rule.TryClassify(
+            new WalletDiff(new WalletId(WalletKind.Retainer, "Yui"), 10_000, 9_500, T0),
+            Ctx("Teleport"), out _));
+    }
 }
