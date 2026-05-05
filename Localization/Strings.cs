@@ -2,6 +2,7 @@ namespace GilDelta.Localization;
 
 public static class Strings
 {
+    // Set/read only from the framework thread. Dalamud guarantees serial access there.
     private static Language _current = Language.English;
 
     public static void SetLanguage(Language lang) => _current = lang;
@@ -56,10 +57,10 @@ public static class Strings
         "Retainer sale", "リテイナー売上", "Gehilfenverkauf", "Vente de servant", "雇员销售", "고용인 판매"
     );
     public static string CategoryRetainerWithdraw => T(
-        "Retainer withdraw", "リテイナー引出", "Abhebung", "Retrait servant", "雇员取款", "고용인 인출"
+        "Retainer withdraw", "リテイナー引出", "Gehilfen-Abhebung", "Retrait servant", "雇员取款", "고용인 인출"
     );
     public static string CategoryRetainerDeposit => T(
-        "Retainer deposit", "リテイナー預入", "Einzahlung", "Dépôt servant", "雇员存款", "고용인 입금"
+        "Retainer deposit", "リテイナー預入", "Gehilfen-Einzahlung", "Dépôt servant", "雇员存款", "고용인 입금"
     );
     public static string CategoryNpcShopBuy => T(
         "NPC purchase", "NPC購入", "NSC-Kauf", "Achat NPC", "NPC购买", "NPC 구매"
