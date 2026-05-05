@@ -101,4 +101,60 @@ public class EventStoreTests : IDisposable
         Assert.Single(loaded);
         Assert.Equal(100, loaded[0].Amount);
     }
+
+    [Fact]
+    public void Reclassify_replaces_categories_via_inferrer_and_keeps_bak()
+    {
+        var store = new EventStore(Path_);
+        var t0 = DateTimeOffset.Parse("2026-05-05T14:00:00+09:00");
+
+        // Two existing events, both Misc.
+        store.Append(SampleEvent(t0,            100, "old1"));
+        store.Append(SampleEvent(t0.AddSeconds(1), 200, "old2"));
+
+        // Reclassify in range; rule turns everything into NpcShopBuy.
+        var inferrer = new Inferrer(new IInferenceRule[] { new RewriteToShopBuy() });
+        store.Reclassify(t0, t0.AddSeconds(2), inferrer);
+
+        var loaded = store.LoadAll().ToList();
+        Assert.Equal(2, loaded.Count);
+        Assert.All(loaded, ev => Assert.Equal(GilEventCategory.NpcShopBuy, ev.Category));
+
+        // .bak should exist with original Misc events.
+        var bakPath = Path_ + ".bak";
+        Assert.True(File.Exists(bakPath));
+        Assert.Contains("\"category\":\"Misc\"", File.ReadAllText(bakPath));
+    }
+
+    [Fact]
+    public void Reclassify_leaves_out_of_range_events_untouched()
+    {
+        var store = new EventStore(Path_);
+        var t0 = DateTimeOffset.Parse("2026-05-05T14:00:00+09:00");
+        var laterT = t0.AddDays(5);
+
+        store.Append(SampleEvent(t0,     100, "in-range"));
+        store.Append(SampleEvent(laterT, 200, "out-of-range"));
+
+        var inferrer = new Inferrer(new IInferenceRule[] { new RewriteToShopBuy() });
+        store.Reclassify(t0, t0.AddHours(1), inferrer);
+
+        var loaded = store.LoadAll().ToList();
+        var inRange  = loaded.Single(e => e.Note == "old-note rewritten" || e.Amount == 100);
+        var outRange = loaded.Single(e => e.Amount == 200);
+
+        Assert.Equal(GilEventCategory.NpcShopBuy, inRange.Category);
+        Assert.Equal(GilEventCategory.Misc, outRange.Category);
+    }
+
+    /// <summary>Test helper: a fake rule that always rewrites to NpcShopBuy.</summary>
+    private sealed class RewriteToShopBuy : IInferenceRule
+    {
+        public bool TryClassify(WalletDiff diff, GameContext ctx, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out GilEvent? ev)
+        {
+            ev = new GilEvent(diff.At, diff.Id, diff.Delta,
+                GilEventCategory.NpcShopBuy, "old-note rewritten");
+            return true;
+        }
+    }
 }
