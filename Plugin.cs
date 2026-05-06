@@ -48,7 +48,6 @@ public sealed class Plugin : IDalamudPlugin
             new NpcShopSellRule(),
             new MarketBoardBuyRule(),
             new RepairRule(),
-            new TeleportRule(),
             new MiscRule(),
         });
 
