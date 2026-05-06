@@ -23,6 +23,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly WindowSystem _windowSystem = new("GilDelta");
 
     private readonly List<Wallet.WalletDiff> _recentDiffs = new();
+    private readonly AddonStateTracker _addonState = new();
+    private static readonly TimeSpan AddonRecencyWindow = TimeSpan.FromSeconds(2);
     private WalletReader? _reader;
     private WalletWatcher? _watcher;
     private WidgetWindow? _widget;
@@ -53,6 +55,10 @@ public sealed class Plugin : IDalamudPlugin
         _store = new EventStore(EventStorePathFor(Service.PlayerState.ContentId));
         _log = new EventLog();
         _log.LoadFromStore(_store);
+
+        // Sample addon state every Framework tick. Subscribe BEFORE the
+        // WalletWatcher so the addon snapshot is fresh whenever a diff fires.
+        Service.Framework.Update += SampleAddonState;
 
         _reader = new WalletReader();
         _watcher = new WalletWatcher(Service.Framework, _reader);
@@ -130,16 +136,36 @@ public sealed class Plugin : IDalamudPlugin
         Service.Log.Information($"GilDelta command: {command} {args}");
     }
 
+    private void SampleAddonState(Dalamud.Plugin.Services.IFramework _)
+    {
+        try
+        {
+            _addonState.Tick(AddonProbe.OpenAddons(Service.GameGui));
+        }
+        catch
+        {
+            // GetAddonByName can throw if the game is mid-teardown; skip the tick.
+        }
+    }
+
     private void HandleDiff(Wallet.WalletDiff diff)
     {
-        var ctx = new GameContext(
-            AddonProbe.OpenAddons(Service.GameGui),
-            _recentDiffs.ToArray(),  // small ring buffer
-            DateTimeOffset.Now);
+        // Use the rolling 2-second window of recently-seen addons so the rules
+        // still match even when the Shop / Teleport / Repair addon was closed
+        // by the time WalletWatcher detected the diff on the next tick.
+        var openAddons = _addonState.RecentlyOpen(AddonRecencyWindow);
+        var ctx = new GameContext(openAddons, _recentDiffs.ToArray(), DateTimeOffset.Now);
         _recentDiffs.Add(diff);
         if (_recentDiffs.Count > 32) _recentDiffs.RemoveAt(0);
 
         var ev = _inferrer.Classify(diff, ctx);
+
+        // Diagnostic breadcrumb so misclassifications can be debugged from /xllog.
+        Service.Log.Information(
+            "Diff {Kind}({Id}) {Delta:+#,0;-#,0;0} -> {Cat}; recentAddons=[{Addons}]",
+            diff.Id.Kind, diff.Id.Identifier, diff.Delta, ev.Category,
+            string.Join(",", openAddons));
+
         try
         {
             _store.Append(ev);
@@ -176,6 +202,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         _watcher?.Dispose();
+        Service.Framework.Update   -= SampleAddonState;
         Service.ClientState.Login  -= OnLogin;
         Service.ClientState.Logout -= OnLogout;
         Service.CommandManager.RemoveHandler("/gildelta");
