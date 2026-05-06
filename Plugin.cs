@@ -8,6 +8,8 @@ using GilDelta.Events;
 using GilDelta.Events.Rules;
 using GilDelta.Localization;
 using GilDelta.Wallet;
+using GilDelta.Windows;
+using GilDelta.Windows.Dashboard;
 using GilDelta.Windows.Widget;
 
 namespace GilDelta;
@@ -28,6 +30,8 @@ public sealed class Plugin : IDalamudPlugin
     private WalletReader? _reader;
     private WalletWatcher? _watcher;
     private WidgetWindow? _widget;
+    private DashboardWindow? _dashboard;
+    private ConfigWindow? _configWindow;
 
     public Plugin(IDalamudPluginInterface pi)
     {
@@ -72,6 +76,19 @@ public sealed class Plugin : IDalamudPlugin
         };
         _widget = new WidgetWindow(_config, renderers, BuildWidgetContext);
         _windowSystem.AddWindow(_widget);
+
+        var tabs = new IDashboardTab[]
+        {
+            new TimelineTab(),
+            new ChartTab(),
+            new BreakdownTab(),
+            new HeatmapTab(),
+        };
+        _dashboard = new DashboardWindow(_config, tabs, BuildDashboardContext);
+        _windowSystem.AddWindow(_dashboard);
+
+        _configWindow = new ConfigWindow(_config);
+        _windowSystem.AddWindow(_configWindow);
 
         Service.ClientState.Login  += OnLogin;
         Service.ClientState.Logout += OnLogout;
@@ -131,8 +148,14 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnCommand(string command, string args)
     {
-        // Plan 3 wires the dashboard / config window. For Plan 2 just log.
-        Service.Log.Information($"GilDelta command: {command} {args}");
+        if (args.Trim().Equals("config", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_configWindow is not null) _configWindow.IsOpen = !_configWindow.IsOpen;
+        }
+        else
+        {
+            if (_dashboard is not null) _dashboard.IsOpen = !_dashboard.IsOpen;
+        }
     }
 
     private void SampleAddonState(Dalamud.Plugin.Services.IFramework _)
@@ -187,16 +210,21 @@ public sealed class Plugin : IDalamudPlugin
             theme: Theme.MidnightCoin.Instance);
     }
 
+    private DashboardContext? BuildDashboardContext()
+    {
+        var snapshot = _watcher?.LastSnapshot;
+        if (snapshot is null) return null;
+        return new DashboardContext(
+            wallets: snapshot,
+            events: _log.All,
+            now: DateTimeOffset.Now,
+            theme: Theme.MidnightCoin.Instance);
+    }
+
     private void DrawUi() => _windowSystem.Draw();
 
-    // Stub callbacks so the Dalamud plugin installer's "Open config UI" / "Open
-    // main UI" buttons resolve. Plan 3 will wire these to the real ConfigWindow
-    // and DashboardWindow respectively.
-    private void OnOpenConfigUi() =>
-        Service.Log.Information("GilDelta: OpenConfigUi requested (config window pending Plan 3)");
-
-    private void OnOpenMainUi() =>
-        Service.Log.Information("GilDelta: OpenMainUi requested (dashboard pending Plan 3)");
+    private void OnOpenConfigUi() { if (_configWindow is not null) _configWindow.IsOpen = true; }
+    private void OnOpenMainUi()   { if (_dashboard    is not null) _dashboard.IsOpen    = true; }
 
     public void Dispose()
     {
