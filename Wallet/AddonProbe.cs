@@ -18,8 +18,6 @@ public static class AddonProbe
         "ItemSearch", "ItemSearchResult",
         // Repair
         "Repair",
-        // Teleport
-        "Teleport", "TeleportTown", "TeleportHousingFriend",
     };
 
     public static IReadOnlySet<string> OpenAddons(IGameGui gui)

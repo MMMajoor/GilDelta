@@ -18,7 +18,6 @@ public class RuleChainTests
         new NpcShopSellRule(),
         new MarketBoardBuyRule(),
         new RepairRule(),
-        new TeleportRule(),
         new MiscRule(),
     });
 
