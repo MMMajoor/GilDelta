@@ -5,6 +5,7 @@
     <Description>Track gil flow across self, retainers, and FC chest.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="tests\**\*.cs" />
