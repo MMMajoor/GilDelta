@@ -81,7 +81,9 @@ public sealed class Plugin : IDalamudPlugin
             ShowInHelp = false,
         });
 
-        Service.PluginInterface.UiBuilder.Draw += DrawUi;
+        Service.PluginInterface.UiBuilder.Draw         += DrawUi;
+        Service.PluginInterface.UiBuilder.OpenConfigUi += OnOpenConfigUi;
+        Service.PluginInterface.UiBuilder.OpenMainUi   += OnOpenMainUi;
     }
 
     private string EventStorePathFor(ulong contentId)
@@ -162,6 +164,15 @@ public sealed class Plugin : IDalamudPlugin
 
     private void DrawUi() => _windowSystem.Draw();
 
+    // Stub callbacks so the Dalamud plugin installer's "Open config UI" / "Open
+    // main UI" buttons resolve. Plan 3 will wire these to the real ConfigWindow
+    // and DashboardWindow respectively.
+    private void OnOpenConfigUi() =>
+        Service.Log.Information("GilDelta: OpenConfigUi requested (config window pending Plan 3)");
+
+    private void OnOpenMainUi() =>
+        Service.Log.Information("GilDelta: OpenMainUi requested (dashboard pending Plan 3)");
+
     public void Dispose()
     {
         _watcher?.Dispose();
@@ -169,7 +180,9 @@ public sealed class Plugin : IDalamudPlugin
         Service.ClientState.Logout -= OnLogout;
         Service.CommandManager.RemoveHandler("/gildelta");
         Service.CommandManager.RemoveHandler("/gd");
-        Service.PluginInterface.UiBuilder.Draw -= DrawUi;
+        Service.PluginInterface.UiBuilder.Draw         -= DrawUi;
+        Service.PluginInterface.UiBuilder.OpenConfigUi -= OnOpenConfigUi;
+        Service.PluginInterface.UiBuilder.OpenMainUi   -= OnOpenMainUi;
         _windowSystem.RemoveAllWindows();
         Service.PluginInterface.SavePluginConfig(_config);
     }
