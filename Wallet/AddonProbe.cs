@@ -5,9 +5,21 @@ namespace GilDelta.Wallet;
 
 public static class AddonProbe
 {
-    /// <summary>Names of Dalamud addons the inference rules care about.</summary>
+    /// <summary>Names of Dalamud addons the inference rules care about.
+    /// Includes common variants we might see across NPC shop / retainer / repair /
+    /// teleport flows; the rule chain only matches names it cares about, so spurious
+    /// entries here are harmless. </summary>
     private static readonly string[] Watched = {
-        "Shop", "InclusionShop", "ItemSearch", "Repair", "Teleport",
+        // NPC shops
+        "Shop", "ShopExchangeCurrency", "ShopExchangeItem", "InclusionShop",
+        // Retainer market listing (treated as Shop-equivalent for sells)
+        "RetainerSellList", "RetainerSell",
+        // Marketboard
+        "ItemSearch", "ItemSearchResult",
+        // Repair
+        "Repair",
+        // Teleport
+        "Teleport", "TeleportTown", "TeleportHousingFriend",
     };
 
     public static IReadOnlySet<string> OpenAddons(IGameGui gui)
