@@ -1,6 +1,6 @@
 # GilDelta
 
-Dalamud plugin (API 15) that tracks your gil flow across **your own wallet, every retainer, and the FC chest**. Each change is auto-classified (submarine return, retainer sale, NPC purchase, marketboard buy, repair, …) and surfaced through a configurable always-on widget plus a four-tab dashboard.
+Dalamud plugin for FFXIV that tracks your gil flow across **your own wallet, every retainer, and the FC chest**. Each change is auto-classified (submarine return, retainer sale, NPC purchase, marketboard buy, repair, …) and surfaced through a configurable always-on widget plus a four-tab dashboard.
 
 Read-only — never writes back to game state.
 
