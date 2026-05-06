@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
@@ -6,6 +7,8 @@ using Dalamud.Plugin;
 using GilDelta.Events;
 using GilDelta.Events.Rules;
 using GilDelta.Localization;
+using GilDelta.Wallet;
+using GilDelta.Windows.Widget;
 
 namespace GilDelta;
 
@@ -18,6 +21,11 @@ public sealed class Plugin : IDalamudPlugin
     private readonly EventLog _log;
     private readonly Inferrer _inferrer;
     private readonly WindowSystem _windowSystem = new("GilDelta");
+
+    private readonly List<Wallet.WalletDiff> _recentDiffs = new();
+    private WalletReader? _reader;
+    private WalletWatcher? _watcher;
+    private WidgetWindow? _widget;
 
     public Plugin(IDalamudPluginInterface pi)
     {
@@ -45,6 +53,20 @@ public sealed class Plugin : IDalamudPlugin
         _store = new EventStore(EventStorePathFor(Service.PlayerState.ContentId));
         _log = new EventLog();
         _log.LoadFromStore(_store);
+
+        _reader = new WalletReader();
+        _watcher = new WalletWatcher(Service.Framework, _reader);
+        _watcher.OnDiff += HandleDiff;
+
+        var renderers = new IWidgetRenderer[]
+        {
+            new MinimalRenderer(),
+            new CompactRenderer(),
+            new TrendRenderer(),
+            new TileRenderer(),
+        };
+        _widget = new WidgetWindow(_config, renderers, BuildWidgetContext);
+        _windowSystem.AddWindow(_widget);
 
         Service.ClientState.Login  += OnLogin;
         Service.ClientState.Logout += OnLogout;
@@ -106,15 +128,49 @@ public sealed class Plugin : IDalamudPlugin
         Service.Log.Information($"GilDelta command: {command} {args}");
     }
 
+    private void HandleDiff(Wallet.WalletDiff diff)
+    {
+        var ctx = new GameContext(
+            AddonProbe.OpenAddons(Service.GameGui),
+            _recentDiffs.ToArray(),  // small ring buffer
+            DateTimeOffset.Now);
+        _recentDiffs.Add(diff);
+        if (_recentDiffs.Count > 32) _recentDiffs.RemoveAt(0);
+
+        var ev = _inferrer.Classify(diff, ctx);
+        try
+        {
+            _store.Append(ev);
+            _log.Add(ev);
+        }
+        catch (Exception e)
+        {
+            Service.Log.Warning(e, "EventStore.Append failed");
+        }
+    }
+
+    private WidgetContext? BuildWidgetContext()
+    {
+        var snapshot = _watcher?.LastSnapshot;
+        if (snapshot is null || snapshot.Count == 0) return null;
+        return new WidgetContext(
+            wallets: snapshot,
+            recentEvents: _log.All,
+            now: DateTimeOffset.Now,
+            theme: Theme.MidnightCoin.Instance);
+    }
+
     private void DrawUi() => _windowSystem.Draw();
 
     public void Dispose()
     {
+        _watcher?.Dispose();
         Service.ClientState.Login  -= OnLogin;
         Service.ClientState.Logout -= OnLogout;
         Service.CommandManager.RemoveHandler("/gildelta");
         Service.CommandManager.RemoveHandler("/gd");
         Service.PluginInterface.UiBuilder.Draw -= DrawUi;
+        _windowSystem.RemoveAllWindows();
         Service.PluginInterface.SavePluginConfig(_config);
     }
 }
