@@ -24,4 +24,22 @@
       <Link>images\icon.png</Link>
     </None>
   </ItemGroup>
+  <!-- DalamudPackager 15 (DefaultDalamudPackagerRelease target) stages files
+       into bin/Release/GilDelta/, zips them into latest.zip, and cleans up
+       the loose copies — including GilDelta.dll itself. That breaks Dalamud
+       Dev Plugin Locations, which expect a DLL on disk. Re-extract the zip
+       AFTER DalamudPackager runs so a loadable GilDelta.dll lives beside
+       latest.zip in the staged folder. -->
+  <Target Name="ExtractStagedZipForDevPlugin"
+          AfterTargets="Build"
+          DependsOnTargets="DefaultDalamudPackagerDebug;DefaultDalamudPackagerRelease">
+    <PropertyGroup>
+      <_StagedZip>$(OutputPath)$(MSBuildProjectName)\latest.zip</_StagedZip>
+      <_StagedDir>$(OutputPath)$(MSBuildProjectName)\</_StagedDir>
+    </PropertyGroup>
+    <Unzip Condition="Exists('$(_StagedZip)')"
+           SourceFiles="$(_StagedZip)"
+           DestinationFolder="$(_StagedDir)"
+           OverwriteReadOnlyFiles="true" />
+  </Target>
 </Project>
