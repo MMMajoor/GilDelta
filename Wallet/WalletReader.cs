@@ -12,7 +12,8 @@ public sealed class WalletReader
     {
         var list = new List<Wallet>();
         TryReadSelf(list);
-        // Tasks 9 and 10 add retainer and FC reads.
+        TryReadRetainers(list);
+        // Task 10 adds FC reads.
         return list;
     }
 
@@ -24,6 +25,25 @@ public sealed class WalletReader
             if (manager == null) return;
             var amount = manager->GetInventoryItemCount(GilItemId);
             sink.Add(new Wallet(new WalletId(WalletKind.Self, ""), (long)amount));
+        }
+    }
+
+    private static void TryReadRetainers(List<Wallet> sink)
+    {
+        unsafe
+        {
+            var rm = FFXIVClientStructs.FFXIV.Client.Game.RetainerManager.Instance();
+            if (rm == null) return;
+            for (var i = 0u; i < rm->Retainers.Length; i++)
+            {
+                var r = rm->Retainers[(int)i];
+                if (r.RetainerId == 0) continue;       // empty slot
+                var name = r.NameString;
+                if (string.IsNullOrEmpty(name)) continue;
+                sink.Add(new Wallet(
+                    new WalletId(WalletKind.Retainer, name),
+                    (long)r.Gil));
+            }
         }
     }
 }
