@@ -13,6 +13,14 @@ public sealed class DashboardWindow : Window
     private readonly IReadOnlyDictionary<DashboardTab, IDashboardTab> _tabs;
     private readonly Func<DashboardContext?> _ctxProvider;
 
+    /// <summary>
+    /// True only on the very first Draw() after the window opens. Used to
+    /// honor <see cref="Configuration.DefaultTab"/> exactly once instead of
+    /// re-selecting it every frame (which would prevent the user from ever
+    /// switching tabs).
+    /// </summary>
+    private bool _selectDefaultTabOnce;
+
     public DashboardWindow(
         Configuration config,
         IEnumerable<IDashboardTab> tabs,
@@ -32,6 +40,8 @@ public sealed class DashboardWindow : Window
         };
     }
 
+    public override void OnOpen() => _selectDefaultTabOnce = true;
+
     public override void Draw()
     {
         var ctx = _ctxProvider();
@@ -45,7 +55,9 @@ public sealed class DashboardWindow : Window
         {
             foreach (var tab in _tabs.Values)
             {
-                var flags = tab.Identity == _config.DefaultTab
+                // Only force-select the default tab on the first frame after
+                // the window opens; otherwise the user can never switch away.
+                var flags = (_selectDefaultTabOnce && tab.Identity == _config.DefaultTab)
                     ? ImGuiTabItemFlags.SetSelected
                     : ImGuiTabItemFlags.None;
 
@@ -57,6 +69,8 @@ public sealed class DashboardWindow : Window
             }
             ImGui.EndTabBar();
         }
+
+        _selectDefaultTabOnce = false;
     }
 
     public override void OnClose() => _config.DashboardSize = Size ?? _config.DashboardSize;
