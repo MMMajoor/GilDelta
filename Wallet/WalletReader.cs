@@ -13,7 +13,7 @@ public sealed class WalletReader
         var list = new List<Wallet>();
         TryReadSelf(list);
         TryReadRetainers(list);
-        // Task 10 adds FC reads.
+        TryReadFreeCompany(list);
         return list;
     }
 
@@ -43,6 +43,38 @@ public sealed class WalletReader
                 sink.Add(new Wallet(
                     new WalletId(WalletKind.Retainer, name),
                     (long)r.Gil));
+            }
+        }
+    }
+
+    private static void TryReadFreeCompany(List<Wallet> sink)
+    {
+        unsafe
+        {
+            try
+            {
+                var proxy = FFXIVClientStructs.FFXIV.Client.UI.Info.InfoProxyFreeCompany.Instance();
+                if (proxy == null) return;
+                var fcName = proxy->NameString;
+                if (string.IsNullOrEmpty(fcName)) return;
+
+                // FCS exposes the FC chest gil through InventoryManager.GetFreeCompanyGil(),
+                // which queries the same backend the in-game FC chest UI uses. The value is
+                // only populated while the player is actually in their FC's house / has
+                // recently opened the chest; otherwise it will read as 0, which is a fine
+                // placeholder for the breakdown row until the user visits the chest.
+                long amount = 0;
+                var manager = InventoryManager.Instance();
+                if (manager != null)
+                {
+                    amount = (long)manager->GetFreeCompanyGil();
+                }
+
+                sink.Add(new Wallet(new WalletId(WalletKind.FreeCompanyChest, fcName), amount));
+            }
+            catch
+            {
+                // FCS API moved; skip gracefully so the rest of ReadAll keeps working.
             }
         }
     }
