@@ -18,6 +18,7 @@ public class RuleChainTests
         new NpcShopSellRule(),
         new MarketBoardBuyRule(),
         new RepairRule(),
+        new TeleportRule(),
         new MiscRule(),
     });
 
@@ -71,6 +72,36 @@ public class RuleChainTests
         var diff = new WalletDiff(
             new WalletId(WalletKind.Self, ""), 100_000, 50_000, T0);
         var ctx = new GameContext(new HashSet<string> { "Shop" }, Array.Empty<WalletDiff>(), T0);
+
+        var ev = inferrer.Classify(diff, ctx);
+
+        Assert.Equal(GilEventCategory.NpcShopBuy, ev.Category);
+    }
+
+    [Fact]
+    public void Self_decrease_after_teleport_cast_classifies_as_Teleport()
+    {
+        var inferrer = FullChain();
+        var diff = new WalletDiff(
+            new WalletId(WalletKind.Self, ""), 100_000, 99_700, T0);
+        var ctx = new GameContext(
+            new HashSet<string>(), Array.Empty<WalletDiff>(), T0, recentlyCastTeleport: true);
+
+        var ev = inferrer.Classify(diff, ctx);
+
+        Assert.Equal(GilEventCategory.Teleport, ev.Category);
+    }
+
+    [Fact]
+    public void Teleport_cast_does_not_hijack_an_NPC_shop_buy()
+    {
+        // Defensive: shop addon open + teleport flag set should still be a buy,
+        // since NpcShopBuyRule precedes TeleportRule in the chain.
+        var inferrer = FullChain();
+        var diff = new WalletDiff(
+            new WalletId(WalletKind.Self, ""), 100_000, 50_000, T0);
+        var ctx = new GameContext(
+            new HashSet<string> { "Shop" }, Array.Empty<WalletDiff>(), T0, recentlyCastTeleport: true);
 
         var ev = inferrer.Classify(diff, ctx);
 
