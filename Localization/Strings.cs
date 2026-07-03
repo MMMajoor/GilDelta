@@ -43,6 +43,16 @@ public static class Strings
         "최근 업데이트"
     );
 
+    // ─── Timeline reclassify ───
+    public static string ReclassifyAs => T(
+        "Reclassify as:",
+        "再分類:",
+        "Neu einordnen als:",
+        "Reclasser comme :",
+        "重新分类为：",
+        "다시 분류:"
+    );
+
     // ─── Dashboard tabs ───
     public static string TabTimeline  => T("Timeline", "タイムライン", "Zeitachse", "Chronologie", "时间线", "타임라인");
     public static string TabChart     => T("Chart",    "チャート",     "Diagramm",  "Graphique",   "图表",    "차트");

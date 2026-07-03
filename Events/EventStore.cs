@@ -107,6 +107,47 @@ public sealed class EventStore
         File.Replace(temp, _path, destinationBackupFileName: null);
     }
 
+    /// <summary>
+    /// Overrides a single event's category (manual reclassification from the UI).
+    /// Matches <paramref name="target"/> by value, rewrites it in place with the new
+    /// category and an audit note recording the previous one. The previous file is
+    /// preserved as <c>&lt;path&gt;.bak</c>. Returns the updated event, or null if no
+    /// matching event was found or the category was already <paramref name="newCategory"/>.
+    /// </summary>
+    public GilEvent? SetCategory(GilEvent target, GilEventCategory newCategory)
+    {
+        if (!File.Exists(_path)) return null;
+
+        var current = LoadAll().ToList();
+        var idx = current.FindIndex(e => e.Equals(target));
+        if (idx < 0) return null;
+
+        var original = current[idx];
+        if (original.Category == newCategory) return null;
+
+        var note = string.IsNullOrEmpty(original.Note)
+            ? $"manual reclassify; was={original.Category}"
+            : $"manual reclassify; was={original.Category}; {original.Note}";
+        var updated = original with { Category = newCategory, Note = note };
+        current[idx] = updated;
+
+        var bakPath = _path + ".bak";
+        File.Copy(_path, bakPath, overwrite: true);
+
+        var temp = _path + ".tmp";
+        using (var writer = new StreamWriter(temp, append: false))
+        {
+            foreach (var ev in current)
+            {
+                var record = StoredEvent.From(ev, CurrentSchemaVersion);
+                writer.WriteLine(JsonSerializer.Serialize(record, JsonOpts));
+            }
+        }
+        File.Replace(temp, _path, destinationBackupFileName: null);
+
+        return updated;
+    }
+
     /// <summary>Internal DTO for JSON (de)serialization.</summary>
     private sealed record StoredEvent(
         [property: JsonPropertyName("v")]        int V,

@@ -13,16 +13,25 @@ public sealed class DashboardContext
 
     public long Total { get; }
 
+    /// <summary>
+    /// Manual reclassify hook: (event, newCategory). Null when the dashboard is
+    /// built without a persistence layer (e.g. in tests). The Timeline tab only
+    /// offers reclassification when this is set.
+    /// </summary>
+    public Action<GilEvent, GilEventCategory>? Reclassify { get; }
+
     public DashboardContext(
         IReadOnlyList<Wallet.Wallet> wallets,
         IReadOnlyList<GilEvent> events,
         DateTimeOffset now,
-        Theme.Theme theme)
+        Theme.Theme theme,
+        Action<GilEvent, GilEventCategory>? reclassify = null)
     {
-        Wallets = wallets;
-        Events  = events;
-        Now     = now;
-        Theme   = theme;
+        Wallets    = wallets;
+        Events     = events;
+        Now        = now;
+        Theme      = theme;
+        Reclassify = reclassify;
 
         long total = 0;
         foreach (var w in wallets) total += w.Amount;

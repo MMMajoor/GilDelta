@@ -147,6 +147,60 @@ public class EventStoreTests : IDisposable
         Assert.Equal(GilEventCategory.Misc, outRange.Category);
     }
 
+    [Fact]
+    public void SetCategory_rewrites_target_and_keeps_others_and_bak()
+    {
+        var store = new EventStore(Path_);
+        var t0 = DateTimeOffset.Parse("2026-05-05T14:00:00+09:00");
+        var target = SampleEvent(t0,             100, "shop");
+        var other  = SampleEvent(t0.AddSeconds(1), 200, "keep");
+        store.Append(target);
+        store.Append(other);
+
+        var updated = store.SetCategory(target, GilEventCategory.SubmarineReturn);
+
+        Assert.NotNull(updated);
+        Assert.Equal(GilEventCategory.SubmarineReturn, updated!.Category);
+        Assert.Contains("manual reclassify; was=Misc", updated.Note);
+
+        var loaded = store.LoadAll().ToList();
+        Assert.Equal(2, loaded.Count);
+        Assert.Equal(GilEventCategory.SubmarineReturn, loaded[0].Category);
+        Assert.Equal(GilEventCategory.Misc, loaded[1].Category);   // untouched
+        Assert.Equal("keep", loaded[1].Note);
+
+        // Original preserved in .bak.
+        var bak = File.ReadAllText(Path_ + ".bak");
+        Assert.Contains("\"note\":\"shop\"", bak);
+    }
+
+    [Fact]
+    public void SetCategory_returns_null_when_target_not_found()
+    {
+        var store = new EventStore(Path_);
+        var t0 = DateTimeOffset.Parse("2026-05-05T14:00:00+09:00");
+        store.Append(SampleEvent(t0, 100, "present"));
+
+        var absent = SampleEvent(t0.AddDays(1), 999, "absent");
+        var result = store.SetCategory(absent, GilEventCategory.Repair);
+
+        Assert.Null(result);
+        Assert.False(File.Exists(Path_ + ".bak"));   // no rewrite happened
+    }
+
+    [Fact]
+    public void SetCategory_returns_null_when_category_unchanged()
+    {
+        var store = new EventStore(Path_);
+        var t0 = DateTimeOffset.Parse("2026-05-05T14:00:00+09:00");
+        var ev = SampleEvent(t0, 100, "n");   // already Misc
+        store.Append(ev);
+
+        var result = store.SetCategory(ev, GilEventCategory.Misc);
+
+        Assert.Null(result);
+    }
+
     /// <summary>Test helper: a fake rule that always rewrites to NpcShopBuy.</summary>
     private sealed class RewriteToShopBuy : IInferenceRule
     {

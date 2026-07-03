@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Dalamud.Bindings.ImGui;
 using GilDelta.Events;
@@ -9,6 +10,9 @@ public sealed class TimelineTab : IDashboardTab
 {
     public DashboardTab Identity => DashboardTab.Timeline;
     public string Title => Strings.TabTimeline;
+
+    private static readonly GilEventCategory[] ReclassifyChoices =
+        Enum.GetValues<GilEventCategory>();
 
     public void Draw(DashboardContext ctx)
     {
@@ -30,20 +34,31 @@ public sealed class TimelineTab : IDashboardTab
 
             foreach (var ev in events)
             {
+                // Stable per-event popup id (Ticks survives row reordering across frames).
+                var popupId = $"##reclass{ev.Timestamp.Ticks}";
+
                 ImGui.TableNextRow();
-                ImGui.TableNextColumn();
+
+                // Column 0 is a row-spanning Selectable so a left-click anywhere on
+                // the row opens the reclassify popup. The timestamp is its label.
+                ImGui.TableSetColumnIndex(0);
                 ImGui.PushStyleColor(ImGuiCol.Text, ctx.Theme.TextMuted);
-                ImGui.TextUnformatted(ev.Timestamp.ToString("MM-dd HH:mm:ss"));
+                if (ImGui.Selectable(ev.Timestamp.ToString("MM-dd HH:mm:ss") + popupId,
+                        false, ImGuiSelectableFlags.SpanAllColumns)
+                    && ctx.Reclassify is not null)
+                {
+                    ImGui.OpenPopup(popupId);
+                }
                 ImGui.PopStyleColor();
 
-                ImGui.TableNextColumn();
+                ImGui.TableSetColumnIndex(1);
                 ImGui.PushStyleColor(ImGuiCol.Text, ctx.Theme.TextAccent);
                 ImGui.TextUnformatted(CategoryLabel(ev.Category));
                 ImGui.PopStyleColor();
                 if (!string.IsNullOrEmpty(ev.Note) && ImGui.IsItemHovered())
                     ImGui.SetTooltip(ev.Note);
 
-                ImGui.TableNextColumn();
+                ImGui.TableSetColumnIndex(2);
                 var walletText = ev.Wallet.Kind switch
                 {
                     GilDelta.Wallet.WalletKind.Self             => "self",
@@ -53,11 +68,24 @@ public sealed class TimelineTab : IDashboardTab
                 };
                 ImGui.TextUnformatted(walletText);
 
-                ImGui.TableNextColumn();
+                ImGui.TableSetColumnIndex(3);
                 var col = ev.Amount >= 0 ? ctx.Theme.PositiveDelta : ctx.Theme.NegativeDelta;
                 ImGui.PushStyleColor(ImGuiCol.Text, col);
                 ImGui.TextUnformatted($"{ev.Amount:+#,0;-#,0;0}");
                 ImGui.PopStyleColor();
+
+                if (ctx.Reclassify is not null && ImGui.BeginPopup(popupId))
+                {
+                    ImGui.TextDisabled(Strings.ReclassifyAs);
+                    ImGui.Separator();
+                    foreach (var cat in ReclassifyChoices)
+                    {
+                        var isCurrent = cat == ev.Category;
+                        if (ImGui.MenuItem(CategoryLabel(cat), "", isCurrent) && !isCurrent)
+                            ctx.Reclassify(ev, cat);
+                    }
+                    ImGui.EndPopup();
+                }
             }
             ImGui.EndTable();
         }

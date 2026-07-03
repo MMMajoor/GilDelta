@@ -23,6 +23,19 @@ public sealed class EventLog
 
     public void Add(GilEvent ev) => _events.Add(ev);
 
+    /// <summary>
+    /// Swaps the in-memory instance matching <paramref name="old"/> for
+    /// <paramref name="updated"/> so the UI reflects a reclassification without a
+    /// disk reload. Returns false if no matching event was found.
+    /// </summary>
+    public bool Replace(GilEvent old, GilEvent updated)
+    {
+        var idx = _events.FindIndex(e => e.Equals(old));
+        if (idx < 0) return false;
+        _events[idx] = updated;
+        return true;
+    }
+
     public void Clear() => _events.Clear();
 
     public IEnumerable<GilEvent> Since(DateTimeOffset threshold)

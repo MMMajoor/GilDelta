@@ -70,6 +70,35 @@ public class EventLogTests : IDisposable
     }
 
     [Fact]
+    public void Replace_swaps_matching_instance()
+    {
+        var log = new EventLog();
+        var t0 = DateTimeOffset.Parse("2026-05-05T14:00:00+09:00");
+        var original = E(t0, 100, GilEventCategory.Misc);
+        log.Add(original);
+        log.Add(E(t0.AddSeconds(1), 200));
+
+        var updated = original with { Category = GilEventCategory.SubmarineReturn };
+        var ok = log.Replace(original, updated);
+
+        Assert.True(ok);
+        Assert.Equal(GilEventCategory.SubmarineReturn, log.All[0].Category);
+        Assert.Equal(200, log.All[1].Amount);   // sibling untouched
+    }
+
+    [Fact]
+    public void Replace_returns_false_when_not_found()
+    {
+        var log = new EventLog();
+        log.Add(E(DateTimeOffset.UnixEpoch, 1));
+
+        var absent = E(DateTimeOffset.UnixEpoch.AddDays(1), 999);
+        var ok = log.Replace(absent, absent with { Category = GilEventCategory.Repair });
+
+        Assert.False(ok);
+    }
+
+    [Fact]
     public void Clear_empties_All()
     {
         var log = new EventLog();
