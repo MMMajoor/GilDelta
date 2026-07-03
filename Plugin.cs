@@ -19,7 +19,7 @@ public sealed class Plugin : IDalamudPlugin
     public string Name => "GilDelta";
 
     private readonly Configuration _config;
-    private readonly EventStore _store;
+    private EventStore _store;
     private readonly EventLog _log;
     private readonly Inferrer _inferrer;
     private readonly WindowSystem _windowSystem = new("GilDelta");
@@ -131,9 +131,23 @@ public sealed class Plugin : IDalamudPlugin
     {
         try
         {
-            var newStore = new EventStore(EventStorePathFor(Service.PlayerState.ContentId));
+            var contentId = Service.PlayerState.ContentId;
+            if (contentId == 0)
+            {
+                // ContentId not populated yet; keep the current store rather than
+                // re-pointing it at the bogus 0.jsonl. The next Login (or the
+                // construction-time path) will carry the real id.
+                Service.Log.Warning("OnLogin fired with ContentId=0; keeping existing store path");
+                return;
+            }
+
+            // Re-point the store at the active character's file. Without this the
+            // store stays on whatever path was built at construction time — if the
+            // plugin loaded at the title screen that was 0.jsonl, and every event
+            // would append there instead of the character's log.
+            _store = new EventStore(EventStorePathFor(contentId));
             _log.Clear();
-            _log.LoadFromStore(newStore);
+            _log.LoadFromStore(_store);
         }
         catch (Exception e)
         {
