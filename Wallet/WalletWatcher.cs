@@ -8,20 +8,42 @@ public sealed class WalletWatcher : IDisposable
 {
     private readonly IFramework _framework;
     private readonly WalletReader _reader;
+    private readonly Func<bool> _canRead;
     private readonly Dictionary<WalletId, long> _last = new();
 
     public IReadOnlyList<Wallet> LastSnapshot { get; private set; } = Array.Empty<Wallet>();
     public event Action<WalletDiff>? OnDiff;
 
-    public WalletWatcher(IFramework framework, WalletReader reader)
+    /// <param name="canRead">
+    /// Predicate gating whether native game memory is safe to read this tick
+    /// (i.e. the player is logged in). Reading FFXIVClientStructs singletons
+    /// during logout / game shutdown dereferences freed memory and produces a
+    /// native access violation, which a try/catch cannot recover from — so we
+    /// must skip the tick entirely rather than catch it.
+    /// </param>
+    public WalletWatcher(IFramework framework, WalletReader reader, Func<bool> canRead)
     {
         _framework = framework;
         _reader = reader;
+        _canRead = canRead;
         _framework.Update += Tick;
+    }
+
+    /// <summary>
+    /// Drops the cached per-wallet balances. Call on logout so the next login
+    /// re-baselines instead of diffing against stale amounts and emitting
+    /// phantom events.
+    /// </summary>
+    public void Reset()
+    {
+        _last.Clear();
+        LastSnapshot = Array.Empty<Wallet>();
     }
 
     private void Tick(IFramework _)
     {
+        if (!_canRead()) return;
+
         try
         {
             var snapshot = _reader.ReadAll();

@@ -64,7 +64,7 @@ public sealed class Plugin : IDalamudPlugin
         Service.Framework.Update += SampleAddonState;
 
         _reader = new WalletReader();
-        _watcher = new WalletWatcher(Service.Framework, _reader);
+        _watcher = new WalletWatcher(Service.Framework, _reader, () => Service.ClientState.IsLoggedIn);
         _watcher.OnDiff += HandleDiff;
 
         var renderers = new IWidgetRenderer[]
@@ -143,6 +143,9 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnLogout(int type, int code)
     {
+        // Stop diffing against stale balances; the watcher's login guard also
+        // halts native reads until the next Login fires.
+        _watcher?.Reset();
         Service.Log.Information($"GilDelta: logout type={type} code={code}");
     }
 
@@ -160,6 +163,11 @@ public sealed class Plugin : IDalamudPlugin
 
     private void SampleAddonState(Dalamud.Plugin.Services.IFramework _)
     {
+        // Skip while logged out: GetAddonByName touches native UI state that is
+        // freed during logout / game shutdown, where a native access violation
+        // would crash the process before the catch below could run.
+        if (!Service.ClientState.IsLoggedIn) return;
+
         try
         {
             _addonState.Tick(AddonProbe.OpenAddons(Service.GameGui));
