@@ -26,9 +26,10 @@ GilDelta/
 │   ├── WalletReader.cs                # reads via FFXIVClientStructs (see below)
 │   ├── WalletWatcher.cs               # Framework.Update poller, emits OnDiff
 │   ├── AddonProbe.cs                  # checks which Watched addons are loaded
-│   └── AddonStateTracker.cs           # rolling 2-second history of seen addons
+│   ├── AddonStateTracker.cs           # rolling 2-second history of seen addons
+│   └── CastStateTracker.cs            # rolling 3-second history of Teleport casts
 ├── Events/
-│   ├── GilEventCategory.cs            # 10-member enum (Teleport kept for back-compat though rule was dropped)
+│   ├── GilEventCategory.cs            # 10-member enum
 │   ├── GilEvent.cs                    # sealed record (Timestamp, Wallet, Amount, Category, Note)
 │   ├── GameContext.cs                 # OpenAddons + RecentDiffs + Now, fed to rules
 │   ├── IInferenceRule.cs              # TryClassify(diff, ctx, [NotNullWhen(true)] out ev)
@@ -43,6 +44,7 @@ GilDelta/
 │       ├── NpcShopSellRule.cs         # Self +Δ + Shop/InclusionShop addon
 │       ├── MarketBoardBuyRule.cs      # Self -Δ + ItemSearch addon
 │       ├── RepairRule.cs              # Self -Δ + Repair addon
+│       ├── TeleportRule.cs            # Self -Δ + recent Teleport cast (action 5)
 │       └── MiscRule.cs                # fallback (always matches)
 ├── Theme/                             # MidnightCoin (dark + gold + monospace)
 ├── Localization/                      # 6-arg T() helper (EN/JA/DE/FR/ZH/KO)
@@ -80,13 +82,14 @@ These were verified by decompiling `%AppData%\XIVLauncher\addon\Hooks\dev\FFXIVC
 - **FC chest gil:** `InventoryManager.Instance()->GetFreeCompanyGil()` returns `uint`. Reads as 0 outside the FC house / before opening the chest, which is fine — a 0-amount wallet still appears in the breakdown row.
 - **FC name:** `InfoProxyFreeCompany.Instance()->NameString`.
 - **Open addons:** `Service.GameGui.GetAddonByName(name)` returns `AtkUnitBasePtr`; `addon.Address != 0` means loaded.
+- **Local player cast (for Teleport):** `Control.Instance()->LocalPlayer` gives the local `BattleChara*`; `IsCasting` (property) and `GetCastInfo()` are inherited from `Character`. `GetCastInfo()->ActionId == 5` is the Teleport action. Read this way because SDK 15 removed `IClientState.LocalPlayer` (see gotcha #2). Return is action 8 (free); only `5` costs gil.
 
 ## Dalamud SDK 15 gotchas (caught the hard way)
 
 These are the deviations that cost hours during Plan 1 / 2 / 3:
 
 1. **`pi.Inject<T>()` doesn't exist.** Use `pi.Inject(new Service())` (non-generic, takes an instance whose `[PluginService]` static members it fills via reflection). The instance is throwaway because all properties are static.
-2. **`IClientState.LocalContentId` is gone.** The active character's content ID lives on `IPlayerState.ContentId`. Service container has both `ClientState` and `PlayerState`.
+2. **`IClientState.LocalContentId` is gone.** The active character's content ID lives on `IPlayerState.ContentId`. Service container has both `ClientState` and `PlayerState`. **`IClientState.LocalPlayer` is also gone** — read the local character from FFXIVClientStructs (`Control.Instance()->LocalPlayer`) instead, as `CastStateTracker`'s caller does in `Plugin.IsCastingTeleport`.
 3. **`Dalamud.Bindings.ImGui` is the active ImGui namespace, NOT `ImGuiNET`.** Includes `ImGui`, `ImGuiCol`, `ImGuiWindowFlags`, `ImGuiTabItemFlags`, etc.
 4. **`PlotLines` / `PlotHistogram` signatures differ from ImGui.NET.** Drop the `values_offset` arg and use `ReadOnlySpan<float>`. The working signature is:
    ```
@@ -110,15 +113,17 @@ These are the deviations that cost hours during Plan 1 / 2 / 3:
 
 `Plugin.HandleDiff` runs every wallet diff through `Inferrer.Classify(diff, ctx)` where `ctx.OpenAddons` is the **rolling 2-second union** of seen addons (not just "open right now"). This catches the "Shop closed before WalletWatcher detected the next-tick gil change" race. Implementation lives in `AddonStateTracker`.
 
+`ctx.RecentlyCastTeleport` works the same way for teleports: `CastStateTracker` records every tick the local player is mid-Teleport-cast, and the rolling **3-second** window is queried at diff time. The wider window matters because gil is deducted at cast *completion* (which is also why cancelling a teleport never charges you / never emits a diff), so by the time the diff fires `IsCasting` has already gone false — the rolling stamp is what `TeleportRule` matches against.
+
 Each classified event also writes a one-line breadcrumb at `IPluginLog.Information` level:
 ```
-Diff Self() +150 -> NpcShopSell; recentAddons=[Shop]
+Diff Self() -300 -> Teleport; recentAddons=[]; teleportCast=True
 ```
 Useful for `/xllog` post-mortem when a misclassification is reported. Prefer adding tests + tightening rules over expanding `AddonProbe.Watched`.
 
 ## Known-deferred classification gaps
 
-- **Teleport** rule was dropped in commit `69c3ce1` because the Teleport addon doesn't always open (favorites, world-map right-click, aetheryte interactions). Cost is small (a few hundred gil), Misc fallback is acceptable. The `GilEventCategory.Teleport` enum value and `Strings.CategoryTeleport` are kept for source-compat.
+- **Teleport** is classified again by `TeleportRule` (see `SESSION-TELEPORT-CAST-RULE.md`). The original addon-based rule was dropped in commit `69c3ce1` because the Teleport addon doesn't always open (favorites, world-map right-click, aetheryte interactions); the replacement keys on the Teleport *cast* (action id 5) instead, which fires for every paid teleport regardless of launch method. Magic number caveat: if a patch ever renumbers the action, teleports silently revert to `Misc` — fix is the `TeleportActionId` constant in `Plugin.cs`. Manual reclassify is the backstop for any miss.
 - **MarketBoard sale** doesn't have a dedicated rule. Marketboard sales appear as a Retainer +Δ when the player retrieves them, so they're classified as `RetainerSale`. Splitting them out would require correlating with retainer market queue state — possible but deferred to v1.x.
 - **Quest reward** and similar small Self +Δ events fall through to `Misc`. Hard to detect without addon hooks.
 
@@ -142,7 +147,7 @@ dotnet build -c Release
 dotnet test
 ```
 
-xUnit project at `tests/GilDelta.Tests/`. Pure-logic only — no Dalamud references. ImGui rendering is verified in-game, not by tests. Current count: ~60 tests covering Wallet types, Inferrer + every rule, RuleChain integration, EventStore (append/load/reclassify), EventLog, WidgetContext, DashboardContext.
+xUnit project at `tests/GilDelta.Tests/`. Pure-logic only — no Dalamud references. ImGui rendering is verified in-game, not by tests. Current count: 71 tests covering Wallet types, Inferrer + every rule (incl. TeleportRule), RuleChain integration, EventStore (append/load/reclassify), EventLog, WidgetContext, DashboardContext.
 
 ## Distribution
 

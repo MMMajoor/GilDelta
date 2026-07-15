@@ -10,14 +10,20 @@ public sealed class GameContext
     public IReadOnlyList<WalletDiff> RecentDiffs { get; }
     public DateTimeOffset Now { get; }
 
+    /// <summary>True if the local player cast Teleport within the recency window
+    /// at the time this diff was detected. Drives <c>TeleportRule</c>.</summary>
+    public bool RecentlyCastTeleport { get; }
+
     public GameContext(
         IReadOnlySet<string> openAddons,
         IReadOnlyList<WalletDiff> recentDiffs,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool recentlyCastTeleport = false)
     {
-        OpenAddons  = openAddons;
-        RecentDiffs = recentDiffs;
-        Now         = now;
+        OpenAddons           = openAddons;
+        RecentDiffs          = recentDiffs;
+        Now                  = now;
+        RecentlyCastTeleport = recentlyCastTeleport;
     }
 
     public static GameContext Empty(DateTimeOffset now) =>

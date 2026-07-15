@@ -27,6 +27,11 @@ public sealed class Plugin : IDalamudPlugin
     private readonly List<Wallet.WalletDiff> _recentDiffs = new();
     private readonly AddonStateTracker _addonState = new();
     private static readonly TimeSpan AddonRecencyWindow = TimeSpan.FromSeconds(2);
+    private readonly CastStateTracker _castState = new();
+    private static readonly TimeSpan TeleportRecencyWindow = TimeSpan.FromSeconds(3);
+    // FFXIV "Teleport" action id (the gil-costing teleport cast). Return is 8 and
+    // is free, so matching id 5 alone is both complete and false-positive-safe.
+    private const uint TeleportActionId = 5;
     private WalletReader? _reader;
     private WalletWatcher? _watcher;
     private WidgetWindow? _widget;
@@ -52,6 +57,7 @@ public sealed class Plugin : IDalamudPlugin
             new NpcShopSellRule(),
             new MarketBoardBuyRule(),
             new RepairRule(),
+            new TeleportRule(),
             new MiscRule(),
         });
 
@@ -59,9 +65,10 @@ public sealed class Plugin : IDalamudPlugin
         _log = new EventLog();
         _log.LoadFromStore(_store);
 
-        // Sample addon state every Framework tick. Subscribe BEFORE the
-        // WalletWatcher so the addon snapshot is fresh whenever a diff fires.
+        // Sample addon + cast state every Framework tick. Subscribe BEFORE the
+        // WalletWatcher so both snapshots are fresh whenever a diff fires.
         Service.Framework.Update += SampleAddonState;
+        Service.Framework.Update += SampleCastState;
 
         _reader = new WalletReader();
         _watcher = new WalletWatcher(Service.Framework, _reader, () => Service.ClientState.IsLoggedIn);
@@ -193,13 +200,46 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    private void SampleCastState(Dalamud.Plugin.Services.IFramework _)
+    {
+        // Same logout guard as SampleAddonState: reading LocalPlayer during
+        // teardown can touch freed native memory.
+        if (!Service.ClientState.IsLoggedIn) return;
+
+        try
+        {
+            // Stamp while the Teleport cast is in progress; the gil deduction
+            // (and the resulting diff) lands a tick or two after the cast ends,
+            // within the recency window. LocalPlayer is null mid-zone, which
+            // reads as "not casting" — harmless, the in-cast stamps already hold.
+            _castState.Tick(IsCastingTeleport());
+        }
+        catch
+        {
+            // Skip the tick if the native read throws mid-teardown.
+        }
+    }
+
+    // SDK 15: IClientState no longer exposes LocalPlayer, so read the cast state
+    // straight from FFXIVClientStructs like WalletReader does for gil. Read-only.
+    private static unsafe bool IsCastingTeleport()
+    {
+        var control = FFXIVClientStructs.FFXIV.Client.Game.Control.Control.Instance();
+        if (control == null) return false;
+        var me = control->LocalPlayer;
+        if (me == null) return false;
+        if (!me->IsCasting) return false;
+        return me->GetCastInfo()->ActionId == TeleportActionId;
+    }
+
     private void HandleDiff(Wallet.WalletDiff diff)
     {
         // Use the rolling 2-second window of recently-seen addons so the rules
         // still match even when the Shop / Teleport / Repair addon was closed
         // by the time WalletWatcher detected the diff on the next tick.
         var openAddons = _addonState.RecentlyOpen(AddonRecencyWindow);
-        var ctx = new GameContext(openAddons, _recentDiffs.ToArray(), DateTimeOffset.Now);
+        var recentlyCastTeleport = _castState.RecentlyCastTeleport(TeleportRecencyWindow);
+        var ctx = new GameContext(openAddons, _recentDiffs.ToArray(), DateTimeOffset.Now, recentlyCastTeleport);
         _recentDiffs.Add(diff);
         if (_recentDiffs.Count > 32) _recentDiffs.RemoveAt(0);
 
@@ -207,9 +247,9 @@ public sealed class Plugin : IDalamudPlugin
 
         // Diagnostic breadcrumb so misclassifications can be debugged from /xllog.
         Service.Log.Information(
-            "Diff {Kind}({Id}) {Delta:+#,0;-#,0;0} -> {Cat}; recentAddons=[{Addons}]",
+            "Diff {Kind}({Id}) {Delta:+#,0;-#,0;0} -> {Cat}; recentAddons=[{Addons}]; teleportCast={Tp}",
             diff.Id.Kind, diff.Id.Identifier, diff.Delta, ev.Category,
-            string.Join(",", openAddons));
+            string.Join(",", openAddons), recentlyCastTeleport);
 
         try
         {
@@ -273,6 +313,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         _watcher?.Dispose();
         Service.Framework.Update   -= SampleAddonState;
+        Service.Framework.Update   -= SampleCastState;
         Service.ClientState.Login  -= OnLogin;
         Service.ClientState.Logout -= OnLogout;
         Service.CommandManager.RemoveHandler("/gildelta");
