@@ -74,7 +74,8 @@ public sealed class Plugin : IDalamudPlugin
             new TrendRenderer(),
             new TileRenderer(),
         };
-        _widget = new WidgetWindow(_config, renderers, BuildWidgetContext);
+        _widget = new WidgetWindow(_config, renderers, BuildWidgetContext,
+            () => { if (_dashboard is not null) _dashboard.IsOpen = true; });
         _windowSystem.AddWindow(_widget);
 
         var tabs = new IDashboardTab[]
