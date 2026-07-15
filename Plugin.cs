@@ -241,7 +241,27 @@ public sealed class Plugin : IDalamudPlugin
             wallets: snapshot,
             events: _log.All,
             now: DateTimeOffset.Now,
-            theme: Theme.MidnightCoin.Instance);
+            theme: Theme.MidnightCoin.Instance,
+            reclassify: ReclassifyEvent);
+    }
+
+    private void ReclassifyEvent(GilEvent ev, GilEventCategory newCategory)
+    {
+        try
+        {
+            var updated = _store.SetCategory(ev, newCategory);
+            if (updated is not null)
+            {
+                _log.Replace(ev, updated);
+                Service.Log.Information(
+                    "Manual reclassify {Old} -> {New} ({Amount:+#,0;-#,0;0})",
+                    ev.Category, newCategory, ev.Amount);
+            }
+        }
+        catch (Exception e)
+        {
+            Service.Log.Warning(e, "Manual reclassify failed");
+        }
     }
 
     private void DrawUi() => _windowSystem.Draw();
